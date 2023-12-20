@@ -1,0 +1,44 @@
+{
+  "name": "@ferrer/ferrer",
+  "version": "1.0.0",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "description": "Ferrer is a run-time type system for TypeScript apps.",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "import": {
+        "types": "./dist/esm/index.d.ts",
+        "default": "./dist/esm/index.js"
+      },
+      "require": {
+        "types": "./dist/cjs/index.d.ts",
+        "default": "./dist/cjs/index.js"
+      }
+    }
+  },
+  "main": "./dist/cjs/index.js",
+  "types": "./dist/cjs/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rimraf dist coverage",
+    "build": "run-s build:js",
+    "build:js": "run-p build:cjs build:esm",
+    "build:cjs": "tsc --project tsconfig.json --module commonjs --moduleResolution Node10 --outDir ./dist/cjs --declaration --declarationDir ./dist/cjs && echo >./dist/cjs/package.json '{\"type\":\"commonjs\"}'",
+    "build:esm": "tsc --project tsconfig.json --verbatimModuleSyntax --outDir ./dist/esm --declaration --declarationDir ./dist/esm",
+    "lint:postbuild:attw": "attw --pack",
+    "test": "run-s build test:only",
+    "test:only": "jest",
+    "test:coverage": "jest --coverage",
+    "test:coverage:view": "sensible-browser coverage/lcov-report/index.html",
+    "coverage": "run-s build test:coverage test:coverage:view"
+  },
+  "dependencies": {
+  }
+}
