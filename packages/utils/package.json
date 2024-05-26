@@ -1,11 +1,11 @@
 {
-  "name": "@ferrer/ferrer",
+  "name": "@ferrer/utils",
   "version": "1.0.0",
   "license": "MIT",
   "publishConfig": {
     "access": "public"
   },
-  "description": "Locate, acquire, and utilize resources anywhere in your system using pattern matching.",
+  "description": "General utility module containing small, broadly-useful functions and TypeScript types.",
   "type": "module",
   "sideEffects": false,
   "exports": {
@@ -39,7 +39,5 @@
     "test:coverage:view": "sensible-browser coverage/lcov-report/index.html",
     "coverage": "run-s build test:coverage test:coverage:view"
   },
-  "dependencies": {
-    "@ferrer/utils": "^1.0.0"
-  }
+  "dependencies": {}
 }
