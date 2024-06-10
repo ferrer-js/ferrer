@@ -43,6 +43,34 @@ export function isObject(o: unknown): o is object {
 }
 
 /**
+ * Test if a value is an `[object Object]` object, i.e. a value with properties
+ * that isn't a function, array, or other exotic.
+ */
+export function isObjectObject(o: unknown): o is object {
+  return Object.prototype.toString.call(o) === "[object Object]"
+}
+
+/**
+ * Test if a value is a plain object. An object is plain if it's created
+ * by `{}`, the `Object` constructor, or `Object.create(null)`
+ */
+export function isPlainObject(value: unknown) {
+  if (typeof value !== "object" || value === null) {
+    return false
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+  const prototype = Object.getPrototypeOf(value)
+  return (
+    (prototype === null ||
+      prototype === Object.prototype ||
+      Object.getPrototypeOf(prototype) === null) &&
+    !(Symbol.toStringTag in value) &&
+    !(Symbol.iterator in value)
+  )
+}
+
+/**
  * Determine if a given value can be used as a key on an object, avoiding
  * possible `Object` prototype pollution or injection.
  */

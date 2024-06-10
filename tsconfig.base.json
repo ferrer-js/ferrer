@@ -18,6 +18,7 @@
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
     "noImplicitOverride": true,
-    "skipLibCheck": false
+    "skipLibCheck": false,
+    "sourceMap": true
   }
 }

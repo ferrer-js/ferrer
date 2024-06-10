@@ -1,28 +1,29 @@
 import type { GenericObject } from "@ferrer/utils"
-import type { TypedName, UserResource } from "./core-types.js"
-import { Context, type ProviderFn } from "./provider.js"
+import type { Atom, AtomFunction, TypedName } from "./core-types.js"
+import { Domain } from "./provider.js"
 
-const ctx$ = Symbol.for("ferrer.global.context")
-type GlobalWithState = typeof globalThis & { [ctx$]: Context }
+const dom$ = Symbol.for("ferrer.global.domain")
+type GlobalWithState = typeof globalThis & { [dom$]: Domain }
 const globalWithState = globalThis as GlobalWithState
 
-if ((globalThis as GenericObject)[ctx$] === undefined) {
-  const globalContext = new Context()
-  ;(globalThis as GenericObject)[ctx$] = globalContext
+if ((globalThis as GenericObject)[dom$] === undefined) {
+  const globalDomain = new Domain()
+  ;(globalThis as GenericObject)[dom$] = globalDomain
 }
 
 export function bind<TArg, TResult>(
   name: TypedName<TArg, TResult>,
-  method: NoInfer<ProviderFn<TArg, TResult>>
+  method: NoInfer<AtomFunction<TArg, TResult>>
 ): void {
-  // XXX: eslint doesnt understand noinfer yet
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-  return globalWithState[ctx$].bind<TArg, TResult>(name, method)
+  return globalWithState[dom$].bind<TArg, TResult>(name, method)
 }
 
-// TODO: Portal
+/**
+ * Retrieve an externally-usable handle to a resource within the global
+ * domain for this runtime environment.
+ */
 export function external<TArg, TResult>(
   pattern: TypedName<TArg, TResult>
-): UserResource<TArg, TResult> {
-  return globalWithState[ctx$].find(pattern)
+): Atom<TArg, TResult> {
+  return globalWithState[dom$].localIngress.externalize<TArg, TResult>(pattern)
 }

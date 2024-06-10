@@ -7,7 +7,6 @@
   },
   "description": "Locate, acquire, and utilize resources anywhere in your system using pattern matching.",
   "type": "module",
-  "sideEffects": false,
   "exports": {
     "./package.json": "./package.json",
     ".": {
@@ -28,7 +27,7 @@
   ],
   "scripts": {
     "clean": "rimraf dist coverage",
-    "build": "run-s build:js",
+    "build": "run-s clean build:js",
     "build:js": "run-p build:cjs build:esm",
     "build:cjs": "tsc --project tsconfig.json --module commonjs --moduleResolution Node10 --outDir ./dist/cjs --declaration --declarationDir ./dist/cjs && echo >./dist/cjs/package.json '{\"type\":\"commonjs\"}'",
     "build:esm": "tsc --project tsconfig.json --verbatimModuleSyntax --outDir ./dist/esm --declaration --declarationDir ./dist/esm",
@@ -40,6 +39,7 @@
     "coverage": "run-s build test:coverage test:coverage:view"
   },
   "dependencies": {
-    "@ferrer/utils": "^1.0.0"
+    "@ferrer/utils": "^1.0.0",
+    "@paralleldrive/cuid2": "^2.2.2"
   }
 }
