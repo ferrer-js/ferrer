@@ -4,6 +4,7 @@ import type {
   AtomFunction,
   AtomImpl,
   Context,
+  Domain,
   Element,
   Name,
   Registration,
@@ -12,6 +13,7 @@ import type {
   Resolver,
   TypedName
 } from "./core-types.js"
+import { Lifecycle } from "./lifecycle.js"
 import { matches } from "./pattern-matching.js"
 
 /**
@@ -66,107 +68,6 @@ export class RegistryResolver implements Resolver {
   }
 }
 
-function safeDispose(context: Context, disposable: Disposable) {
-  try {
-    disposable[Symbol.dispose]()
-  } catch (err) {
-    // TODO: log
-  }
-}
-
-/**
- * The internal state of an `Atom` lifecycle, from `find` to `dispose`.
- * Exactly one `Lifecycle` exists for each acquired `Atom`, whereas a new
- * `Context` is generated every time an atom is called.
- */
-class Lifecycle {
-  /** Domain within which the lifecycle of this resource will be contained. */
-  domain: Domain
-  /** Pattern requested by the consumer of the resource. */
-  pattern: Name
-  /** Actual name resolved from the pattern, if found  */
-  resolvedName?: Name
-  context: Context
-  disposed = false
-  element?: Element
-  atomImpl?: AtomImpl<unknown, unknown>
-  resolver: Resolver
-
-  constructor(
-    domain: Domain,
-    pattern: Name,
-    context: Context,
-    resolver: Resolver
-  ) {
-    this.domain = domain
-    this.pattern = pattern
-    this.context = context
-    this.resolver = resolver
-  }
-
-  dispose(): void {
-    this.disposed = true
-    this.invalidate()
-  }
-
-  invalidate(): void {
-    if (this.atomImpl) {
-      safeDispose(this.context, this.atomImpl)
-    }
-    this.atomImpl = undefined
-    this.element = undefined
-  }
-
-  spawnChildContext(parentContext: Context) {
-    return this.domain.createContext(parentContext)
-  }
-
-  async resolve(): Promise<boolean> {
-    // TODO: better error
-    if (this.disposed) throw new Error("resolve when disposed")
-    // Cached
-    // TODO: ttl
-    if (this.element) return true
-    // Fetch provider
-    // TODO: retries, treat resolver failure as transient?
-    const resolution = await this.resolver.resolve(this.pattern)
-    if (resolution === undefined) throw new Error("unresolved pattern")
-    this.element = resolution.element
-    return true
-  }
-
-  async get(): Promise<boolean> {
-    // TODO: better error
-    if (this.disposed) throw new Error("get when disposed")
-    // TODO: transient error, this should send us back to resolve
-    if (!this.element) throw new Error("invalidated")
-    // TODO: error handling
-    const atom = await this.element.getAtom(this.pattern, this.context)
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-    if (this.disposed) {
-      safeDispose(this.context, atom)
-      throw new Error("resource handle disposed while acquiring resource")
-    }
-    this.atomImpl = atom
-    return true
-  }
-
-  async use(arg: unknown): Promise<unknown> {
-    if (this.disposed || !this.atomImpl) {
-      throw new Error("missing atom")
-    }
-    const useContext = this.spawnChildContext(this.context)
-    // eslint-disable-next-line no-useless-catch
-    try {
-      const result = await this.atomImpl(useContext, arg)
-      return result
-    } catch (err) {
-      // TODO: transient = invalidate and retry
-      throw err
-    }
-  }
-}
-
 export class BaseContext implements Context {
   declare ["constructor"]: typeof BaseContext
 
@@ -193,13 +94,11 @@ export class BaseContext implements Context {
    * Locate a resource matching the given pattern within this context.
    */
   find<TArg, TResult>(pattern: TypedName<TArg, TResult>): Atom<TArg, TResult> {
-    const lifecycle = new Lifecycle(this.domain, pattern, this, this.resolver)
+    const lifecycle = new Lifecycle(this.domain, pattern, this)
 
     return Object.assign(
-      async (arg?: TArg) => {
-        await lifecycle.resolve()
-        await lifecycle.get()
-        return lifecycle.use(arg) as Promise<TResult>
+      (arg?: TArg) => {
+        return lifecycle.run(arg) as Promise<TResult>
       },
       {
         [Symbol.dispose]: () => {
@@ -220,7 +119,7 @@ function isElement(x: unknown): x is Element {
  * `Domain` can call each other directly. When receiving or requesting
  * resources from other domains, a `Portal` must be traversed.
  */
-export class Domain {
+export class BasicDomain implements Domain {
   /** Resources local to this domain. */
   registry: Registry = new BasicRegistry()
   /** Resolver that only resolves directly from the domain's registry. */
@@ -273,9 +172,9 @@ export type ContextMetadata = {
  * outgoing responses, as well as encoding and network transport.
  */
 export class Ingress {
-  domain: Domain
+  domain: BasicDomain
 
-  constructor(domain: Domain) {
+  constructor(domain: BasicDomain) {
     this.domain = domain
   }
 
@@ -290,18 +189,11 @@ export class Ingress {
       undefined,
       this.domain.ingressResolver
     )
-    const lifecycle = new Lifecycle(
-      this.domain,
-      pattern,
-      rootContext,
-      this.domain.ingressResolver
-    )
+    const lifecycle = new Lifecycle(this.domain, pattern, rootContext)
 
     return Object.assign(
-      async (arg?: TArg) => {
-        await lifecycle.resolve()
-        await lifecycle.get()
-        return lifecycle.use(arg) as TResult
+      (arg?: TArg) => {
+        return lifecycle.run(arg) as Promise<TResult>
       },
       {
         [Symbol.dispose]: () => {

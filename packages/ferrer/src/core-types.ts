@@ -80,6 +80,11 @@ export type AtomFunction<TArg, TResult> = (
   arg: TArg
 ) => Promise<TResult>
 
+/**
+ * Implementation of an `Atom`. This is distinguished from the `Atom` itself
+ * in that with `Atom`s, the context is implied at the time of atom creation,
+ * but here, the context is passed as an argument.
+ */
 export type AtomImpl<TArg, TResult> = AtomFunction<TArg, TResult> &
   Disposable &
   AtomMetadata
@@ -105,13 +110,50 @@ export interface Element<TArg = unknown, TResult = unknown> {
 }
 
 /**
- * Context is the shared information available to an Atom during its
- * lifecycle. Each atom's lifecycle has a unique context. The main function
- * of the context is to look up other atoms.
+ * A generic logging function, designed to be adaptible to any structured
+ * logging library.
+ *
+ * @param tags Structural tags to be added to the log message.
+ * @param message Log message body.
+ * @param rest Optional additional parameters to be passed to the backend logging library. Usually these will correspond to printf-style specifiers in `message`.
+ */
+export type LoggingFunction = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (message: string, ...rest: any[]): void
+  (
+    tags: object,
+    message: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ...rest: any[]
+  ): void
+}
+
+/**
+ * Each `Context` provides a generic interface for logging, which will
+ * interoperate with a backend structured logging library.
+ */
+export interface Logging {
+  fatal: LoggingFunction
+  error: LoggingFunction
+  warn: LoggingFunction
+  info: LoggingFunction
+  debug: LoggingFunction
+  trace: LoggingFunction
+}
+
+/**
+ * `Context` is the shared information available to an `Atom` while it is
+ * running. The primary use of `Context` is to look up and use other `Atom`s.
  */
 export interface Context {
   /** Locate an atom matching the given pattern. */
   find<TArg, TResult>(pattern: TypedName<TArg, TResult>): Atom<TArg, TResult>
+
+  /** The resolver for this context */
+  readonly resolver: Resolver
+
+  /** The logging interface for this context */
+  readonly log: Logging
 }
 
 /** The result of resolving a pattern to an element. */
@@ -134,3 +176,17 @@ export interface Registry {
 
 /** Entry in a `Registry` */
 export type Registration = { name: Name; element: Element }
+
+export interface Domain {
+  bind<TArg, TResult>(
+    name: TypedName<TArg, TResult>,
+    element:
+      | NoInfer<AtomFunction<TArg, TResult>>
+      | NoInfer<Element<TArg, TResult>>
+  ): void
+
+  createContext(
+    parentContext: Context | undefined,
+    resolver?: Resolver
+  ): Context
+}
