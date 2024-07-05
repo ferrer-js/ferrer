@@ -8,10 +8,12 @@ it("basic bind and call", async () => {
   const TestSvc = ferrer.name<undefined, { sum: number }>({ svc: "Test" })
 
   ferrer.bind(Adder, async (context, { a, b }) => {
+    console.log("Adder trace", context.trace)
     return { sum: a + b }
   })
 
   ferrer.bind(TestSvc, async (context) => {
+    console.log("TestSvc trace", context.trace)
     using add = context.find(Adder)
     const { sum } = await add({ a: 1, b: 2 })
     console.log("sum", sum)

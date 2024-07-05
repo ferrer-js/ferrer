@@ -1,51 +1,6 @@
-import type { SerializableObject } from "@ferrer/utils"
-
-/** The name of a resource, which is ultimately a plain JSON object. */
-export type Name = SerializableObject
-
-export const TArg$ = Symbol.for("ferrer.type.arg")
-export const TResult$ = Symbol.for("ferrer.type.result")
-
-/** A `Name` that carries additional type information about the argument and return value from a resource. */
-export type TypedName<TArg, TResult> = Name & {
-  [TArg$]: TArg
-  [TResult$]: TResult
-}
-
-/**
- * Create a ferrer name that carries TypeScript information along with it. Arguments
- * must be serializable for general names; use `local_name` for non-serializable
- * arguments that cannot cross domain boundaries.
- */
-export function name<
-  TArg extends SerializableObject | undefined,
-  TResult extends SerializableObject | undefined
->(name: Name) {
-  return name as TypedName<TArg, TResult>
-}
-
-/**
- * A typed ferrer name that requires locality. Requests for this atom
- * may not cross domain boundaries. In exchange, this atom may receive and
- * return non-serializable objects, since it is guaranteed to be
- * an in-process async function call.
- */
-export function local_name<TArg, TResult>(name: Name) {
-  return Object.assign(name, { local: true }) as Name as TypedName<
-    TArg,
-    TResult
-  >
-}
-
-/**
- * Forcibly escapes from the TypeScript type system by typing a resource
- * as `any`.
- */
-export function untyped_name(name: Name) {
-  // `any` ok here, as user is asking for untyped name
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return name as TypedName<any, any>
-}
+import { type Logging } from "./primitives/logging.js"
+import { type Name, type TypedName } from "./primitives/name.js"
+import { type TraceVector } from "./primitives/tracing.js"
 
 /** Metadata about a requested atom. */
 export type AtomMetadata = {
@@ -57,7 +12,8 @@ type OptionalWhenUndefined<TArg> = TArg extends undefined ? [] : [arg: TArg]
 
 /**
  * `Atom`s are the core building block of ferrer systems. They are asynchronous
- * functions that lazily refer to a computation that may be executed anywhere. * Each time the `Atom` is invoked, the computation it represents is carried
+ * functions that lazily refer to a computation that may be executed anywhere.
+ * Each time the `Atom` is invoked, the computation it represents is carried
  * out automatically by the ferrer system, including locating the required
  * resources, marshalling the data, and returning the response.
  *
@@ -72,8 +28,8 @@ export type Atom<TArg, TResult> = ((
   Disposable
 
 /**
- * A plain async function implementing an `Atom`, taking an implied `Context`
- * in which the atom will execute.
+ * A plain async function implementing an `Atom`, which receives the explicit `Context`
+ * in which the atom is being executed.
  */
 export type AtomFunction<TArg, TResult> = (
   context: Context,
@@ -107,38 +63,8 @@ export interface Element<TArg = unknown, TResult = unknown> {
     pattern: Name,
     requestingContext: Context
   ): Promise<AtomImpl<TArg, TResult>>
-}
 
-/**
- * A generic logging function, designed to be adaptible to any structured
- * logging library.
- *
- * @param tags Structural tags to be added to the log message.
- * @param message Log message body.
- * @param rest Optional additional parameters to be passed to the backend logging library. Usually these will correspond to printf-style specifiers in `message`.
- */
-export type LoggingFunction = {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (message: string, ...rest: any[]): void
-  (
-    tags: object,
-    message: string,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ...rest: any[]
-  ): void
-}
-
-/**
- * Each `Context` provides a generic interface for logging, which will
- * interoperate with a backend structured logging library.
- */
-export interface Logging {
-  fatal: LoggingFunction
-  error: LoggingFunction
-  warn: LoggingFunction
-  info: LoggingFunction
-  debug: LoggingFunction
-  trace: LoggingFunction
+  readonly name: Name
 }
 
 /**
@@ -154,6 +80,9 @@ export interface Context {
 
   /** The logging interface for this context */
   readonly log: Logging
+
+  /** The base trace vector for this context. */
+  readonly trace: TraceVector
 }
 
 /** The result of resolving a pattern to an element. */
@@ -177,7 +106,17 @@ export interface Registry {
 /** Entry in a `Registry` */
 export type Registration = { name: Name; element: Element }
 
+/**
+ * `Domain`s are the unit of isolation in Ferrer. Each `Domain` has
+ * its own collection of registered `Name`s mapping to `Element`s, and
+ * attempts to access names in other domains can only happen
+ * via serializable objects sent via an `Egress` from the source
+ * domain to a matching `Ingress` of the target domain.
+ */
 export interface Domain {
+  /**
+   * Bind a `Name` to an `Element` within this `Domain`.
+   */
   bind<TArg, TResult>(
     name: TypedName<TArg, TResult>,
     element:
@@ -187,6 +126,7 @@ export interface Domain {
 
   createContext(
     parentContext: Context | undefined,
-    resolver?: Resolver
+    resolver?: Resolver,
+    traceVector?: TraceVector
   ): Context
 }

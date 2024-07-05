@@ -1,4 +1,11 @@
-import type { AtomImpl, Context, Domain, Element, Name } from "./core-types.js"
+import {
+  TraceEventType,
+  type AtomImpl,
+  type Context,
+  type Domain,
+  type Element,
+  type Name
+} from "./core-types.js"
 import {
   EarlyDisposalError,
   UnresolvedPatternError,
@@ -123,8 +130,16 @@ export class Lifecycle {
         }
 
         // Execute
-        const executionContext = this.domain.createContext(this.context)
+        const executionContext = this.domain.createContext(
+          this.context,
+          undefined,
+          this.context.trace.concat([
+            [TraceEventType.DOMAIN_CALL, element.name]
+          ])
+        )
         const result = await atomImpl(executionContext, arg)
+
+        // JIT disposal; okay since we have already completed the atom invocation
         if (this.isDisposed()) {
           this.cache.replaceCachedAtomImpl(undefined)
         }

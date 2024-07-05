@@ -1,17 +1,20 @@
 import { isObject, type SerializableObject } from "@ferrer/utils"
-import type {
-  Atom,
-  AtomFunction,
-  AtomImpl,
-  Context,
-  Domain,
-  Element,
-  Name,
-  Registration,
-  Registry,
-  Resolution,
-  Resolver,
-  TypedName
+import {
+  TraceEventType,
+  type Atom,
+  type AtomFunction,
+  type AtomImpl,
+  type Context,
+  type Domain,
+  type Element,
+  type Logging,
+  type Name,
+  type Registration,
+  type Registry,
+  type Resolution,
+  type Resolver,
+  type TraceVector,
+  type TypedName
 } from "./core-types.js"
 import { Lifecycle } from "./lifecycle.js"
 import { matches } from "./pattern-matching.js"
@@ -22,9 +25,11 @@ import { matches } from "./pattern-matching.js"
 export class FunctionElement<TArg = unknown, TResult = unknown>
   implements Element<TArg, TResult>
 {
+  name: Name
   fn: AtomFunction<TArg, TResult>
-  constructor(fn: AtomFunction<TArg, TResult>) {
+  constructor(name: Name, fn: AtomFunction<TArg, TResult>) {
     this.fn = fn
+    this.name = name
   }
   getAtom(pattern: Name, _context: Context): Promise<AtomImpl<TArg, TResult>> {
     return Promise.resolve(
@@ -68,14 +73,33 @@ export class RegistryResolver implements Resolver {
   }
 }
 
+function createNoopLogger(): Logging {
+  return {
+    info: () => {},
+    debug: () => {},
+    warn: () => {},
+    error: () => {},
+    fatal: () => {},
+    trace: () => {}
+  }
+}
+
 export class BaseContext implements Context {
   declare ["constructor"]: typeof BaseContext
 
   domain: Domain
   parentContext?: Context
   resolver: Resolver
+  log: Logging
+  trace: TraceVector
 
-  constructor(domain: Domain, parentContext?: Context, resolver?: Resolver) {
+  constructor(
+    domain: Domain,
+    parentContext?: Context,
+    resolver?: Resolver,
+    log?: Logging,
+    trace?: TraceVector
+  ) {
     const inheritedResolver =
       parentContext instanceof BaseContext ? parentContext.resolver : undefined
     const finalResolver = resolver ?? inheritedResolver
@@ -88,6 +112,8 @@ export class BaseContext implements Context {
     this.resolver = finalResolver
     this.parentContext = parentContext
     this.domain = domain
+    this.log = log ?? createNoopLogger()
+    this.trace = trace ?? parentContext?.trace ?? []
   }
 
   /**
@@ -142,7 +168,7 @@ export class BasicDomain implements Domain {
     if (!isElement(element)) {
       this.registry.register(
         name,
-        new FunctionElement(element as AtomFunction<TArg, TResult>)
+        new FunctionElement(name, element as AtomFunction<TArg, TResult>)
       )
       return
     }
@@ -152,9 +178,16 @@ export class BasicDomain implements Domain {
 
   createContext(
     parentContext: Context | undefined,
-    resolver?: Resolver
+    resolver?: Resolver,
+    traceVector?: TraceVector
   ): Context {
-    return new BaseContext(this, parentContext, resolver ?? this.resolver)
+    return new BaseContext(
+      this,
+      parentContext,
+      resolver ?? this.resolver,
+      undefined,
+      traceVector
+    )
   }
 }
 
@@ -187,7 +220,8 @@ export class Ingress {
   ): Atom<TArg, TResult> {
     const rootContext = this.domain.createContext(
       undefined,
-      this.domain.ingressResolver
+      this.domain.ingressResolver,
+      [[TraceEventType.INGRESS_CALL]]
     )
     const lifecycle = new Lifecycle(this.domain, pattern, rootContext)
 

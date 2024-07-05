@@ -1,5 +1,5 @@
 import type { SerializableArray, SerializableObject } from "@ferrer/utils"
-import type { Name } from "./core-types.js"
+import type { Name } from "./Name.js"
 
 /**
  * Determine if the given name matches the given pattern.
